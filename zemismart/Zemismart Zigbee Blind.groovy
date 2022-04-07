@@ -1,5 +1,5 @@
 /**
- *  Copyright 2021
+ *  Copyright 2021, 2022
  *
  *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *	in compliance with the License. You may obtain a copy of the License at:
@@ -17,12 +17,14 @@
  * https://github.com/zigpy/zha-device-handlers/blob/f3302257fbb57f9f9f99ecbdffdd2e7862cc1fd7/zhaquirks/tuya/__init__.py#L846
  *
  * VERSION HISTORY
+ *
+ * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting 
  * 3.0.0 (2021-06-18) [Amos Yuen] - Support new window shade command startPositionChange()
  *		- Rename stop() to stopPositionChange()
  *		- Handle ack and set time zigbee messages
  * 2.3.0 (2021-06-09) [Amos Yuen] - Add presence attribute to indicate whether device is responsive
  * 2.2.0 (2021-06-06) [Amos Yuen] - Add commands for stepping
-*       - Fix push command not sending zigbee commands
+ *       - Fix push command not sending zigbee commands
  * 2.1.0 (2021-05-01) [Amos Yuen] - Add pushable button capability
  *		- Add configurable close and open position thresholds
  * 2.0.0 (2021-03-09) [Amos Yuen] - Change tilt mode open()/close() commands to use set position
@@ -38,7 +40,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.0.0 - 2021-06-18"
+	return "3.1.0 - 2022-04-07"
 }
 
 private def textCopyright() {
@@ -89,6 +91,9 @@ metadata {
 					inClusters: "0000, 0004, 0005, EF00", outClusters: "0019, 000A",
 					manufacturer: "_TZE200_zah67ekd", model: "TS0601",
 					deviceJoinName: "Zemismart Zigbee Blind Motor")
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xuzcvlku" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGBZTN"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43"    // AM43-0.45/40-ES-EZ(TY)
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
 	}
 
 	preferences {
@@ -190,6 +195,7 @@ def setMode() {
 @Field final int CLUSTER_TUYA = 0xEF00
 
 @Field final int ZIGBEE_COMMAND_SET_DATA = 0x00
+@Field final int ZIGBEE_COMMAND_REPORTING = 0x01
 @Field final int ZIGBEE_COMMAND_SET_DATA_RESPONSE = 0x02
 @Field final int ZIGBEE_COMMAND_ACK = 0x0B
 @Field final int ZIGBEE_COMMAND_SET_TIME = 0x24
@@ -216,7 +222,6 @@ def parse(String description) {
 		logUnexpectedMessage("parse: Unhandled description=${description}")
 		return
 	}
-
 	updatePresence(true)
 	Map descMap = zigbee.parseDescriptionAsMap(description)
 	if (descMap.clusterInt != CLUSTER_TUYA) {
@@ -226,6 +231,7 @@ def parse(String description) {
 	def command = zigbee.convertHexToInt(descMap.command)
 	switch (command) {
 		case ZIGBEE_COMMAND_SET_DATA_RESPONSE: // 0x02
+        case ZIGBEE_COMMAND_REPORTING : // 0x01
 			if (!descMap?.data || descMap.data.size() < 7) {
                 logUnexpectedMessage("parse: Invalid data size for SET_DATA_RESPONSE descMap=${descMap}")
 				return
