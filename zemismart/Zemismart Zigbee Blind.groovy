@@ -41,7 +41,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.1 - 2022-04-26 7:43 PM"
+	return "3.1.1 - 2022-04-26 9:18 PM"
 }
 
 private def textCopyright() {
@@ -142,7 +142,7 @@ metadata {
 @Field final List DIRECTIONS = DIRECTION_MAP.collect { it.value }
 @Field final int CHECK_FOR_RESPONSE_INTERVAL_SECONDS = 60
 @Field final int HEARTBEAT_INTERVAL_SECONDS = 4000 // a little more than 1 hour
-@Field final int POSITION_UPDATE_TIMEOUT = 1500    //  in milliseconds 
+@Field final int POSITION_UPDATE_TIMEOUT = 2000    //  in milliseconds 
 
 //
 // Life Cycle
