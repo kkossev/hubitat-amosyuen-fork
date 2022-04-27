@@ -18,7 +18,8 @@
  *
  * VERSION HISTORY
  *
- * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting 
+ * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
+ * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
  * 3.0.0 (2021-06-18) [Amos Yuen] - Support new window shade command startPositionChange()
  *		- Rename stop() to stopPositionChange()
  *		- Handle ack and set time zigbee messages
@@ -40,7 +41,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.0 - 2022-04-07"
+	return "3.1.1 - 2022-04-26 7:43 PM"
 }
 
 private def textCopyright() {
@@ -52,9 +53,11 @@ metadata {
 			ocfDeviceType: "oic.d.blind", vid: "generic-shade") {
 		capability "Actuator"
 		capability "Configuration"
-		capability "Presence Sensor"
+		capability "PresenceSensor"
 		capability "PushableButton"
-		capability "Window Shade"
+		capability "WindowShade"
+        capability "SwitchLevel"      // level - NUMBER, unit:%; setLevel(level, duration); level required (NUMBER) - Level to set (0 to 100); duration optional (NUMBER) - Transition duration in seconds
+        //capability "ChangeLevel"    // startLevelChange(direction); direction required (ENUM) - Direction for level change request; stopLevelChange()
 
 		attribute "speed", "integer"
 
@@ -94,6 +97,16 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xuzcvlku" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGBZTN"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43"    // AM43-0.45/40-ES-EZ(TY)
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_iossyxra" ,deviceJoinName: "Zemismart Tubular Roller Blind Motor AM15" 
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_uzinxci0" ,deviceJoinName: "Zignito Tubular Roller Blind Motor AM15" 
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_yenbr4om" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_hsgrhjpf" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zuz7f94z" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ergbiejo" ,deviceJoinName: "Tuya Zigbee Blind Motor"
 	}
 
 	preferences {
@@ -104,6 +117,7 @@ metadata {
 			options: MODE_MAP, required: true, defaultValue: "1")
 		input("direction", "enum", title: "Direction",
 			options: DIRECTION_MAP, required: true, defaultValue: 0)
+		input("invertPosition", "bool", title: "Invert position reporting", required: true, defaultValue: true)
 		input("maxClosedPosition", "number", title: "Max Closed Position",
 			description: "The max position value that window shade state should be set to closed",
 			required: true, defaultValue: 1)
@@ -128,6 +142,7 @@ metadata {
 @Field final List DIRECTIONS = DIRECTION_MAP.collect { it.value }
 @Field final int CHECK_FOR_RESPONSE_INTERVAL_SECONDS = 60
 @Field final int HEARTBEAT_INTERVAL_SECONDS = 4000 // a little more than 1 hour
+@Field final int POSITION_UPDATE_TIMEOUT = 1500    //  in milliseconds 
 
 //
 // Life Cycle
@@ -146,16 +161,16 @@ def configure() {
 	state.version = textVersion()
 	state.copyright = textCopyright()
 
-	if (atomicState.lastHeardMillis == null) {
-		atomicState.lastHeardMillis = 0
+	if (state.lastHeardMillis == null) {
+		state.lastHeardMillis = 0
 	}
 
 	sendEvent(name: "numberOfButtons", value: 5)
-	if (device.currentPosition != null
-        && (device.currentWindowShade == "closed"
-            || device.currentWindowShade == "open"
-            || device.currentWindowShade == "partially open")) {
-		updateWindowShadeArrived(device.currentPosition)
+	if (device.currentValue("position") != null
+        && (device.currentValue("windowShade") == "closed"
+            || device.currentValue("windowShade") == "open"
+            || device.currentValue("windowShade") == "partially open")) {
+		updateWindowShadeArrived(device.currentValue("position"))
 	}
 
 	// Must run async otherwise, one will block the other
@@ -249,6 +264,7 @@ def parse(String description) {
 		case ZIGBEE_COMMAND_SET_TIME: // 0x24
 			// Data payload seems to increment every hour but doesn't seem to be an absolute value
 	        logTrace("parse: SET_TIME data=${descMap.data}")
+            processTuyaSetTime()
 			return
 		default:
 			logUnexpectedMessage("parse: Unhandled command=${command} descMap=${descMap}")
@@ -274,16 +290,20 @@ def parseSetDataResponse(descMap) {
 			switch (dataValue) {
 				case DP_COMMAND_OPEN: // 0x00
 					logDebug("parse: opening")
+                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					updateWindowShadeOpening()
 					return
 				case DP_COMMAND_STOP: // 0x01
+                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: stopping")
 					return
 				case DP_COMMAND_CLOSE: // 0x02
+                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: closing")
 					updateWindowShadeClosing()
 					return
 				case DP_COMMAND_CONTINUE: // 0x03
+                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: continuing")
 					return
 				default:
@@ -291,9 +311,13 @@ def parseSetDataResponse(descMap) {
 					return
 			}
 		
-		case DP_ID_TARGET_POSITION: // 0x02 Target position
+		case DP_ID_TARGET_POSITION: // 0x02 Target position    // for new blinds models - this is the actual/current position !
 			if (dataValue >= 0 && dataValue <= 100) {
-				logDebug("parse: moving to position ${dataValue}")
+                if ( invertPosition == true ) {
+                    dataValue = 100 - dataValue
+                }
+				logDebug("parse: moved to position ${dataValue}")
+                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeMoving(dataValue)
 				updatePosition(dataValue)
 			} else {
@@ -303,7 +327,11 @@ def parseSetDataResponse(descMap) {
 		
 		case DP_ID_CURRENT_POSITION: // 0x03 Current Position
 			if (dataValue >= 0 && dataValue <= 100) {
+                if ( invertPosition == true ) {
+                    dataValue = 100 - dataValue
+                }
 				logDebug("parse: arrived at position ${dataValue}")
+                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeArrived(dataValue)
 				updatePosition(dataValue)
 			} else {
@@ -324,9 +352,11 @@ def parseSetDataResponse(descMap) {
 		case DP_ID_COMMAND_REMOTE: // 0x07 Remote Command
 			if (dataValue == 0) {
 				logDebug("parse: opening from remote")
+                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeOpening()
 			} else if (dataValue == 1) {
 				logDebug("parse: closing from remote")
+                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeClosing()
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND_REMOTE dataValue=${dataValue}")
@@ -358,8 +388,22 @@ def parseSetDataResponse(descMap) {
 	}
 }
 
+def processTuyaSetTime() {
+    logDebug("${device.displayName} time synchronization request")    
+    def offset = 0
+    try {
+        offset = location.getTimeZone().getOffset(new Date().getTime())
+    }
+    catch(e) {
+        log.error "${device.displayName} cannot resolve current location. please set location in Hubitat location setting. Setting timezone offset to zero"
+    }
+    def cmds = zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_TIME, "0008" +zigbee.convertToHexString((int)(now()/1000),8) +  zigbee.convertToHexString((int)((now()+offset)/1000), 8))
+    logDebug("${device.displayName} sending time data : ${cmds}")
+    cmds.each{ sendHubCommand(new hubitat.device.HubAction(it, hubitat.device.Protocol.ZIGBEE)) }
+}
+
 private ignorePositionReport(position) {
-	def lastPosition = device.currentPosition
+	def lastPosition = device.currentValue("position")
 	logDebug("ignorePositionReport: position=${position}, lastPosition=${lastPosition}")
 	if (lastPosition == "undefined" || isWithinOne(position)) {
 		logTrace("Ignore invalid reports")
@@ -369,11 +413,12 @@ private ignorePositionReport(position) {
 }
 
 private isWithinOne(position) {
-	def lastPosition = device.currentPosition
-	logTrace("isWithinOne: position=${position}, lastPosition=${lastPosition}")
+	def lastPosition = device.currentValue("position")
 	if (lastPosition != "undefined" && Math.abs(position - lastPosition) <= 1) {
+    	logTrace("isWithinOne:true (position=${position}, lastPosition=${lastPosition})")
 		return true
 	}
+ 	logTrace("isWithinOne:false (position=${position}, lastPosition=${lastPosition})")
 	return false
 }
 
@@ -396,18 +441,21 @@ private updateMode(modeValue) {
 private updatePosition(position) {
 	logDebug("updatePosition: position=${position}")
 	if (isWithinOne(position)) {
-		return
+    	logDebug("updatePosition: <b>arrived!</b>")
+        updateWindowShadeArrived(position)
+        return
 	}
-	sendEvent(name: "position", value: position)
+	sendEvent(name: "position", value: position, unit: "%")
+	sendEvent(name: "level", value: position, unit: "%")
 }
 
 private updatePresence(present) {
 	logDebug("updatePresence: present=${present}")
 	if (present) {
-		atomicState.lastHeardMillis = now()
+		state.lastHeardMillis = now()
 		checkHeartbeat()
 	}
-	atomicState.waitingForResponseSinceMillis = null
+	state.waitingForResponseSinceMillis = null
 	sendEvent(name: "presence", value: present ? "present" : "not present")
 }
 
@@ -417,8 +465,8 @@ private updateSpeed(speed) {
 }
 
 private updateWindowShadeMoving(position) {
-	def lastPosition = device.currentPosition
-	logDebug("updateWindowShadeMoving: position=${position}, lastPosition=${lastPosition}")
+	def lastPosition = device.currentValue("position")
+	logDebug("updateWindowShadeMoving: position=${position} (lastPosition=${lastPosition})")
 
 	if (lastPosition < position) {
 		updateWindowShadeOpening()
@@ -456,22 +504,25 @@ private updateWindowShadeArrived(position) {
 //
 
 def close() {
-	logDebug("close")
-	sendEvent(name: "position", value: 0)
+    logDebug("close, direction = ${direction as int}")
+	//sendEvent(name: "position", value: 0)
 	if (mode == MODE_TILT) {
+        	logDebug("close mode == MODE_TILT")
 		setPosition(0)
 	} else {
-		sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_CLOSE, 2)
+        runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_CLOSE, 2)
 	}
 }
 
 def open() {
-	logDebug("open")
-	sendEvent(name: "position", value: 100)
+	logDebug("open, direction = ${direction as int}")
+	//sendEvent(name: "position", value: 100)
 	if (mode == MODE_TILT) {
 		setPosition(100)
 	} else {
-		sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_OPEN, 2)
+        runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_OPEN, 2)
 	}
 }
 
@@ -491,18 +542,38 @@ def startPositionChange(state) {
 
 def stopPositionChange() {
 	logDebug("stopPositionChange")
+    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 	sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_STOP, 2)
 }
 
+def setLevel( level )
+{
+    setPosition(level)
+}
+
 def setPosition(position) {
-	logDebug("setPosition: position=${position}")
 	if (position < 0 || position > 100) {
 		throw new Exception("Invalid position ${position}. Position must be between 0 and 100 inclusive.")
 	}
 	if (isWithinOne(position)) {
-		// Motor is off by one sometimes, so set it to desired value if within one
-		sendEvent(name: "position", value: position)
+	    // Motor is off by one sometimes, so set it to desired value if within one
+	    //	sendEvent(name: "position", value: position)
+        logDebug("setPosition: no need to move!")
+        updateWindowShadeArrived(position)
+        return
 	}
+    Integer currentPosition = device.currentValue("position")
+    if(position > currentPosition) {
+        sendEvent(name: "windowShade", value: "opening")
+    } 
+    else if(position < currentPosition) {
+        sendEvent(name: "windowShade", value: "closing")
+    }    
+    logDebug("setPosition: position=${position}, currentPosition=${device.currentValue('position')}")
+    if ( invertPosition == true ) {
+        position = 100 - position
+    }
+    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 	sendTuyaCommand(DP_ID_TARGET_POSITION, DP_TYPE_VALUE, position.intValue(), 8)
 }
 
@@ -518,7 +589,7 @@ def stepOpen(step) {
 	if (!step) {
 		step = defaultStepAmount
 	}
-	setPosition(Math.max( 0, Math.min(100, (device.currentPosition + step) as int)))
+	setPosition(Math.max( 0, Math.min(100, (device.currentValue("position") + step) as int)))
 }
 
 
@@ -554,12 +625,17 @@ def push(buttonNumber)		{
 	}
 }
 
+
+def endOfMovement() {
+    updateWindowShadeArrived(device.currentValue("position"))
+}
+
 //
 // Helpers
 //
 
 private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
-	atomicState.waitingForResponseSinceMillis = now()
+	state.waitingForResponseSinceMillis = now()
 	checkForResponse()
     
 	def dpHex = zigbee.convertToHexString(dp, 2)
@@ -571,7 +647,7 @@ private sendTuyaCommand(int dp, int dpType, int fnCmd, int fnCmdLength) {
 				   + dpTypeHex
 				   + zigbee.convertToHexString((fnCmdLength / 2) as int, 4)
 				   + fnCmdHex)
-	logTrace("sendTuyaCommand: message=${message}")
+	//logTrace("sendTuyaCommand: message=${message}")
 	zigbee.command(CLUSTER_TUYA, ZIGBEE_COMMAND_SET_DATA, message)
 }
 
@@ -581,29 +657,29 @@ private randomPacketId() {
 
 // Must be non-private to use runInMillis
 def checkForResponse() {
-	logTrace("checkForResponse: waitingForResponseSinceMillis=${atomicState.waitingForResponseSinceMillis}")
-	if (atomicState.waitingForResponseSinceMillis == null) {
+	//logTrace("checkForResponse: waitingForResponseSinceMillis=${state.waitingForResponseSinceMillis}")
+	if (state.waitingForResponseSinceMillis == null) {
 		return
 	}
 	def waitMillis = (CHECK_FOR_RESPONSE_INTERVAL_SECONDS * 1000
-			- (now() - atomicState.waitingForResponseSinceMillis))
-	logTrace("checkForResponse: waitMillis=${waitMillis}")
+			- (now() - state.waitingForResponseSinceMillis))
+	//logTrace("checkForResponse: waitMillis=${waitMillis}")
 	if (waitMillis <= 0) {
 		updatePresence(false)
 	} else {
-		runInMillis(waitMillis, checkForResponse)
+		runInMillis(waitMillis, checkForResponse, [overwrite: true])
 	}
 }
 
 // Must be non-private to use runInMillis
 def checkHeartbeat() {
 	def waitMillis = (HEARTBEAT_INTERVAL_SECONDS * 1000
-			- (now() - atomicState.lastHeardMillis))
-	logTrace("checkHeartbeat: waitMillis=${waitMillis}")
+			- (now() - state.lastHeardMillis))
+	//logTrace("checkHeartbeat: waitMillis=${waitMillis}")
 	if (waitMillis <= 0) {
 		updatePresence(false)
 	} else {
-		runInMillis(waitMillis, checkHeartbeat)
+		runInMillis(waitMillis, checkHeartbeat, [overwrite: true])
 	}
 }
 
