@@ -18,6 +18,8 @@
  *
  * VERSION HISTORY
  *
+ *                                TODO: optimize debug/trace logs!
+ * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions'
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
  * 3.0.0 (2021-06-18) [Amos Yuen] - Support new window shade command startPositionChange()
@@ -41,7 +43,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.1 - 2022-04-26 9:18 PM"
+	return "3.1.2 - 2022-04-30 11:57 AM"
 }
 
 private def textCopyright() {
@@ -95,7 +97,7 @@ metadata {
 					manufacturer: "_TZE200_zah67ekd", model: "TS0601",
 					deviceJoinName: "Zemismart Zigbee Blind Motor")
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xuzcvlku" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGBZTN"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43"    // AM43-0.45/40-ES-EZ(TY)
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43"    //!!! close: 1, open: 2, stop: 0
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_iossyxra" ,deviceJoinName: "Zemismart Tubular Roller Blind Motor AM15" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_uzinxci0" ,deviceJoinName: "Zignito Tubular Roller Blind Motor AM15" 
@@ -107,6 +109,10 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zuz7f94z" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ergbiejo" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_wmcdj3aq" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_cowvfni3" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TYST11_cowvfni3" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
+        // defaults are : close: 2, open: 0, stop: 1
 	}
 
 	preferences {
@@ -117,7 +123,6 @@ metadata {
 			options: MODE_MAP, required: true, defaultValue: "1")
 		input("direction", "enum", title: "Direction",
 			options: DIRECTION_MAP, required: true, defaultValue: 0)
-		input("invertPosition", "bool", title: "Invert position reporting", required: true, defaultValue: true)
 		input("maxClosedPosition", "number", title: "Max Closed Position",
 			description: "The max position value that window shade state should be set to closed",
 			required: true, defaultValue: 1)
@@ -130,6 +135,12 @@ metadata {
 		input("enableDebugLog", "bool", title: "Enable debug logging", required: true, defaultValue: false)
 		input("enableTraceLog", "bool", title: "Enable trace logging", required: true, defaultValue: false)
 		input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
+		input("advancedOptions", "bool", title: "Show Advanced options", required: true, defaultValue: false)
+
+        if (advancedOptions == true) {
+    		input ("invertPosition", "bool", title: "Invert position reporting", required: true, defaultValue: true)
+        }
+        
 	}
 }
 
@@ -142,7 +153,7 @@ metadata {
 @Field final List DIRECTIONS = DIRECTION_MAP.collect { it.value }
 @Field final int CHECK_FOR_RESPONSE_INTERVAL_SECONDS = 60
 @Field final int HEARTBEAT_INTERVAL_SECONDS = 4000 // a little more than 1 hour
-@Field final int POSITION_UPDATE_TIMEOUT = 2000    //  in milliseconds 
+@Field final int POSITION_UPDATE_TIMEOUT = 5000    //  in milliseconds 
 
 //
 // Life Cycle
@@ -189,6 +200,7 @@ def configure() {
 		throw new Exception("maxClosedPosition \"${minOpenPosition}\" must be less than"
 			+ " minOpenPosition \"${minOpenPosition}\".")
 	}
+    if (settings.advancedOptions == null) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
 }
 
 def setDirection() {
