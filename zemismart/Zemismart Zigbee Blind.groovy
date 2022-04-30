@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *
- * 3.1.3 (2022-04-30) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction
+ * 3.1.3 (2022-04-30) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
@@ -43,7 +43,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.3 - 2022-04-30 9:58 PM"
+	return "3.1.3 - 2022-04-30 10:59 PM"
 }
 
 private def textCopyright() {
@@ -339,17 +339,17 @@ def parseSetDataResponse(descMap) {
 	def dataValue = zigbee.convertHexToInt(data[6..-1].join())
 	switch (dp) {
 		case DP_ID_COMMAND: // 0x01 Command
-            if (dataValue == getDpCommandOpen()) {
+            if (dataValue == getDpCommandOpen()) {        // typically 0x00
     			logDebug("parse: opening")
                 restartPositionReportTimeout()
 				updateWindowShadeOpening()
             }
-            else if (dataValue == getDpCommandStop()) {
+            else if (dataValue == getDpCommandStop()) {    // typically 0x01
 				logDebug("parse: stopping")
                 stopPositionReportTimeout()
                 updateWindowShadeArrived()
             }
-            else if (dataValue == getDpCommandClose()) {
+            else if (dataValue == getDpCommandClose()) {   // typically 0x02
 				logDebug("parse: closing")
                 restartPositionReportTimeout()
 				updateWindowShadeClosing()
@@ -602,15 +602,15 @@ def off() {
 }
 
 def startPositionChange(state) {
-	logDebug("startPositionChange")
+    logDebug("startPositionChange state=${state}")
 	switch (state) {
-		case "close":
+		case "close" :
 			close()
-			return
-		case "open":
+			break
+		case "open" :
 			open()
-			return
-		default:
+			break
+		default :
 			throw new Exception("Unsupported startPositionChange state \"${state}\"")
 	}
 }
