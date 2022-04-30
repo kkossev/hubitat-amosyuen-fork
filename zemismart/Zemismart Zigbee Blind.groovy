@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *
- * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; 
+ * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
  * 3.0.0 (2021-06-18) [Amos Yuen] - Support new window shade command startPositionChange()
@@ -42,7 +42,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.2 - 2022-04-30 2:18 PM"
+	return "3.1.2 - 2022-04-30 4:53 PM"
 }
 
 private def textCopyright() {
@@ -57,7 +57,7 @@ metadata {
 		capability "PresenceSensor"
 		capability "PushableButton"
 		capability "WindowShade"
-        //capability "Switch"
+        capability "Switch"
         capability "SwitchLevel"      // level - NUMBER, unit:%; setLevel(level, duration); level required (NUMBER) - Level to set (0 to 100); duration optional (NUMBER) - Transition duration in seconds
         //capability "ChangeLevel"    // startLevelChange(direction); direction required (ENUM) - Direction for level change request; stopLevelChange()
 
@@ -80,39 +80,27 @@ metadata {
 			type: "NUMBER",
 			description: "Motor speed (0 to 100). Values below 5 may not work."]]
 
-		fingerprint(endpointId: "01", profileId: "0104",
-					inClusters: "0000, 0003, 0004, 0005, 0006", outClusters: "0019",
-					manufacturer: "_TYST11_wmcdj3aq", model: "mcdj3aq",
-					deviceJoinName: "Zemismart Zigbee Blind")
-		fingerprint(endpointId: "01", profileId: "0104",
-					inClusters: "0000, 0003, 0004, 0005, 0006", outClusters: "0019",
-					manufacturer: "_TYST11_cowvfr", model: "owvfni3",
-					deviceJoinName: "Zemismart Zigbee Blind")
-		fingerprint(endpointId: "01", profileId: "0104",
-					inClusters: "0000, 0003, 0004, 0005, 0006", outClusters: "0019",
-					deviceJoinName: "Zemismart Zigbee Blind")
-		// AM43-0.45/40-ES-EZ
-		fingerprint(endpointId: "01", profileId: "0104",
-					inClusters: "0000, 0004, 0005, EF00", outClusters: "0019, 000A",
-					manufacturer: "_TZE200_zah67ekd", model: "TS0601",
-					deviceJoinName: "Zemismart Zigbee Blind Motor")
+		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019",      model:"mcdj3aq",manufacturer:"_TYST11_wmcdj3aq", deviceJoinName: "Zemismart Zigbee Blind"             // direction is reversed ?
+		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019",      model:"owvfni3",manufacturer:"_TYST11_cowvfr",   deviceJoinName: "Zemismart Zigbee Curtain Motor"
+		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019",      model:"??????", manufacturer:"_TZE200_zah67ekd", deviceJoinName: "Zemismart Zigbee Blind"
+		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zah67ekd", deviceJoinName: "Zemismart Zigbee Blind Motor"            // AM43-0.45/40-ES-EZ
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xuzcvlku" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGBZTN"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43"    //!!! close: 1, open: 2, stop: 0
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_iossyxra" ,deviceJoinName: "Zemismart Tubular Roller Blind Motor AM15" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_uzinxci0" ,deviceJoinName: "Zignito Tubular Roller Blind Motor AM15" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_yenbr4om" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // supportDp1State
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_hsgrhjpf" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zuz7f94z" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ergbiejo" ,deviceJoinName: "Tuya Zigbee Blind Motor"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_wmcdj3aq" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_cowvfni3" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TYST11_cowvfni3" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // !!! close: 0, open: 2, stop: 1
-        // defaults are : close: 2, open: 0, stop: 1
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43" // !!! close: 1, open: 2, stop: 0
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_wmcdj3aq" ,deviceJoinName: "Tuya Zigbee Blind Motor"           // !!! close: 0, open: 2, stop: 1
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_cowvfni3" ,deviceJoinName: "Zemismart Zigbee Curtain Motor"    // !!! close: 0, open: 2, stop: 1 Curtain Motor
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TYST11_cowvfni3" ,deviceJoinName: "Zemismart Zigbee Curtain Motor"    // !!! close: 0, open: 2, stop: 1 Curtain Motor
+        // defaults are : close: 2, open: 0, stop: 1        
 	}
 
 	preferences {
@@ -155,6 +143,47 @@ metadata {
 @Field final int CHECK_FOR_RESPONSE_INTERVAL_SECONDS = 60
 @Field final int HEARTBEAT_INTERVAL_SECONDS = 4000 // a little more than 1 hour
 @Field final int POSITION_UPDATE_TIMEOUT = 2500    //  in milliseconds 
+
+
+def isCurtainMotor() {
+    def manufacturer = device.getDataValue("manufacturer")
+    return manufacturer in ["_TYST11_cowvfni3", "_TZE200_cowvfni3", "_TYST11_cowvfr"] 
+}
+
+def getDpCommandOpen() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) {
+        return 0x02
+    }
+    else {
+        DP_COMMAND_OPEN //0x00
+    }
+}
+
+def getDpCommandClose() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_rddyvrci"] ) {
+        return 0x01
+    }
+    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) {
+        return 0x00
+    }
+    else {
+        DP_COMMAND_CLOSE //0x02
+    }
+}
+
+def getDpCommandStop() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_rddyvrci"] ) {
+        return 0x00
+    }
+    else {
+        DP_COMMAND_STOP //0x01
+    }
+}
+
+
 
 //
 // Life Cycle
@@ -302,28 +331,27 @@ def parseSetDataResponse(descMap) {
 	def dataValue = zigbee.convertHexToInt(data[6..-1].join())
 	switch (dp) {
 		case DP_ID_COMMAND: // 0x01 Command
-			switch (dataValue) {
-				case DP_COMMAND_OPEN: // 0x00
-					logDebug("parse: opening")
-					updateWindowShadeOpening()
-					break
-				case DP_COMMAND_STOP: // 0x01
-					logDebug("parse: stopping")
-                    stopPositionReportTimeout()
-                    updateWindowShadeArrived()
-					break
-				case DP_COMMAND_CLOSE: // 0x02
-					logDebug("parse: closing")
-					updateWindowShadeClosing()
-					break
-				case DP_COMMAND_CONTINUE: // 0x03
-					logDebug("parse: continuing")
-					return
-				default:
-					logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND dataValue=${dataValue}")
-					break
-			}
-            restartPositionReportTimeout()
+            if (dataValue == getDpCommandOpen()) {
+    			logDebug("parse: opening")
+                restartPositionReportTimeout()
+				updateWindowShadeOpening()
+            }
+            else if (dataValue == getDpCommandStop()) {
+				logDebug("parse: stopping")
+                stopPositionReportTimeout()
+                updateWindowShadeArrived()
+            }
+            else if (dataValue == getDpCommandClose()) {
+				logDebug("parse: closing")
+                restartPositionReportTimeout()
+				updateWindowShadeClosing()
+            }
+            else if (dataValue == DP_COMMAND_CONTINUE) {    // 0x03
+				logDebug("parse: continuing")
+            }
+            else {
+				logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND dataValue=${dataValue}")
+            }
             break
 		
 		case DP_ID_TARGET_POSITION: // 0x02 Target position    // for new blinds models - this is the actual/current position !
@@ -363,8 +391,12 @@ def parseSetDataResponse(descMap) {
 				logUnexpectedMessage("parse: Unexpected DP_ID_DIRECTION dataValue=${dataValue}")
 			}
 			break
-		
-		case DP_ID_COMMAND_REMOTE: // 0x07 Remote Command
+        
+        case 0x06: // 0x06: Arrived at destination (with fncmd==0)
+            logUnexpectedMessage("parse: Arrived at destination (dataValue==${dataValue})")
+			break		
+        
+		case DP_ID_COMMAND_REMOTE: // 0x07 Remote Command  (Curtain 
 			if (dataValue == 0) {
 				logDebug("parse: opening from remote")
 				updateWindowShadeOpening()
@@ -454,13 +486,19 @@ private updateMode(modeValue) {
 
 private updatePosition(position) {
 	logDebug("updatePosition: position=${position}")
+	sendEvent(name: "position", value: position, unit: "%")
+	sendEvent(name: "level", value: position, unit: "%")
+    if (position <= maxClosedPosition) {
+    	sendEvent(name:"switch", value: "off")
+    }
+    else {
+    	sendEvent(name:"switch", value: "on")
+    }
 	if (isWithinOne(position)) {
     	logDebug("updatePosition: <b>arrived!</b>")
         updateWindowShadeArrived(position)
         return
-	}
-	sendEvent(name: "position", value: position, unit: "%")
-	sendEvent(name: "level", value: position, unit: "%")
+	}    
 }
 
 private updatePresence(present) {
@@ -529,7 +567,8 @@ def close() {
 	} 
     else {
         restartPositionReportTimeout()
-        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_CLOSE, 2)
+        def dpCommandClose = getDpCommandClose()
+        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandClose, 2)
 	}
 }
 
@@ -541,8 +580,17 @@ def open() {
 	} 
     else {
         restartPositionReportTimeout()
-        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_OPEN, 2)
+        def dpCommandOpen = getDpCommandOpen()
+        sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandOpen, 2)
 	}
+}
+
+def on() {
+    open()
+}
+
+def off() {
+    close()
 }
 
 def startPositionChange(state) {
@@ -562,7 +610,8 @@ def startPositionChange(state) {
 def stopPositionChange() {
 	logDebug("stopPositionChange")
     restartPositionReportTimeout()
-    sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_STOP, 2)
+    def dpCommandStop = getDpCommandStop()    
+    sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandStop, 2)
 }
 
 def setLevel( level )
