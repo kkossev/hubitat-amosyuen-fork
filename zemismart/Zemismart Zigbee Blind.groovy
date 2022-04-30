@@ -18,6 +18,7 @@
  *
  * VERSION HISTORY
  *
+ * 3.1.3 (2022-04-30) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
@@ -42,7 +43,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.2 - 2022-04-30 4:53 PM"
+	return "3.1.3 - 2022-04-30 9:58 PM"
 }
 
 private def textCopyright() {
@@ -88,7 +89,7 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_iossyxra" ,deviceJoinName: "Zemismart Tubular Roller Blind Motor AM15" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_uzinxci0" ,deviceJoinName: "Zignito Tubular Roller Blind Motor AM15" 
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Tuya Tubular Roller Blind M2805EGBZTN"    // {0x0000: 0x0000, 0x0001: 0x0002, 0x0002: 0x0001}
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_yenbr4om" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // supportDp1State
@@ -123,11 +124,12 @@ metadata {
 		input("enableDebugLog", "bool", title: "Enable debug logging", required: true, defaultValue: false)
 		input("enableTraceLog", "bool", title: "Enable trace logging", required: true, defaultValue: false)
 		input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
-		input("advancedOptions", "bool", title: "Show Advanced options", required: true, defaultValue: false)
+		input("advancedOptions", "bool", title: "Show Advanced options", description: "These advanced options should have been already set correctly for your device/model when device was Configred", required: true, defaultValue: false)
 
         if (advancedOptions == true) {
-    		input ("invertPosition", "bool", title: "Invert position reporting", required: true, defaultValue: true)
-    		input ("positionReportTimeout", "number", title: "Position report timeout, ms", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
+    		input ("invertPosition", "bool", title: "Invert position reporting", description: "Some devices report the position 0..100 inverted", required: true, defaultValue: true)
+    		input ("positionReportTimeout", "number", title: "Position report timeout, ms", description: "The maximum time between position reports", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
+    		input ("mixedDP2reporting", "bool", title: "Ignire the first Position report",  description: "Some devices report both the Target and the Current positions the same way", required: true, defaultValue: false)
         }
         
 	}
@@ -150,6 +152,7 @@ def isCurtainMotor() {
     return manufacturer in ["_TYST11_cowvfni3", "_TZE200_cowvfni3", "_TYST11_cowvfr"] 
 }
 
+// Open - default 0x00
 def getDpCommandOpen() {
     def manufacturer = device.getDataValue("manufacturer")
     if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) {
@@ -160,12 +163,24 @@ def getDpCommandOpen() {
     }
 }
 
+// Stop - default 0x01
+def getDpCommandStop() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_nueqqe6k"] ) {
+        return 0x02
+    }
+    else {
+        DP_COMMAND_STOP //0x01
+    }
+}
+
+// Close - default 0x02
 def getDpCommandClose() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_rddyvrci"] ) {
+    if (manufacturer in _TZE200_nueqqe6k ) {
         return 0x01
     }
-    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) {
+    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3", "_TZE200_rddyvrci"] ) {
         return 0x00
     }
     else {
@@ -173,15 +188,6 @@ def getDpCommandClose() {
     }
 }
 
-def getDpCommandStop() {
-    def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_rddyvrci"] ) {
-        return 0x00
-    }
-    else {
-        DP_COMMAND_STOP //0x01
-    }
-}
 
 
 
@@ -233,6 +239,8 @@ def configure() {
     if (settings.advancedOptions == null) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
     if (settings.invertPosition == null) device.updateSetting("invertPosition", [value: false, type: "bool"]) 
     if (settings.positionReportTimeout == null) device.updateSetting("positionReportTimeout", [value: POSITION_UPDATE_TIMEOUT, type: "number"]) 
+    if (settings.mixedDP2reporting == null) device.updateSetting("mixedDP2reporting", [value: false, type: "bool"]) 
+    
 }
 
 def setDirection() {
@@ -354,7 +362,7 @@ def parseSetDataResponse(descMap) {
             }
             break
 		
-		case DP_ID_TARGET_POSITION: // 0x02 Target position    // for new blinds models - this is the actual/current position !
+		case DP_ID_TARGET_POSITION: // 0x02 Target position    // for M515EGBZTN blinds models - this is ALSO the actual/current position !
 			if (dataValue >= 0 && dataValue <= 100) {
                 if ( invertPosition == true ) {
                     dataValue = 100 - dataValue
