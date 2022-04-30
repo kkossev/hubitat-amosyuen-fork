@@ -18,8 +18,7 @@
  *
  * VERSION HISTORY
  *
- *                                TODO: optimize debug/trace logs!
- * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions'
+ * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; 
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
  * 3.0.0 (2021-06-18) [Amos Yuen] - Support new window shade command startPositionChange()
@@ -43,7 +42,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.2 - 2022-04-30 11:57 AM"
+	return "3.1.2 - 2022-04-30 2:18 PM"
 }
 
 private def textCopyright() {
@@ -58,6 +57,7 @@ metadata {
 		capability "PresenceSensor"
 		capability "PushableButton"
 		capability "WindowShade"
+        //capability "Switch"
         capability "SwitchLevel"      // level - NUMBER, unit:%; setLevel(level, duration); level required (NUMBER) - Level to set (0 to 100); duration optional (NUMBER) - Transition duration in seconds
         //capability "ChangeLevel"    // startLevelChange(direction); direction required (ENUM) - Direction for level change request; stopLevelChange()
 
@@ -139,6 +139,7 @@ metadata {
 
         if (advancedOptions == true) {
     		input ("invertPosition", "bool", title: "Invert position reporting", required: true, defaultValue: true)
+    		input ("positionReportTimeout", "number", title: "Position report timeout, ms", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
         }
         
 	}
@@ -153,7 +154,7 @@ metadata {
 @Field final List DIRECTIONS = DIRECTION_MAP.collect { it.value }
 @Field final int CHECK_FOR_RESPONSE_INTERVAL_SECONDS = 60
 @Field final int HEARTBEAT_INTERVAL_SECONDS = 4000 // a little more than 1 hour
-@Field final int POSITION_UPDATE_TIMEOUT = 5000    //  in milliseconds 
+@Field final int POSITION_UPDATE_TIMEOUT = 2500    //  in milliseconds 
 
 //
 // Life Cycle
@@ -201,6 +202,8 @@ def configure() {
 			+ " minOpenPosition \"${minOpenPosition}\".")
 	}
     if (settings.advancedOptions == null) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
+    if (settings.invertPosition == null) device.updateSetting("invertPosition", [value: false, type: "bool"]) 
+    if (settings.positionReportTimeout == null) device.updateSetting("positionReportTimeout", [value: POSITION_UPDATE_TIMEOUT, type: "number"]) 
 }
 
 def setDirection() {
@@ -302,26 +305,26 @@ def parseSetDataResponse(descMap) {
 			switch (dataValue) {
 				case DP_COMMAND_OPEN: // 0x00
 					logDebug("parse: opening")
-                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					updateWindowShadeOpening()
-					return
+					break
 				case DP_COMMAND_STOP: // 0x01
-                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: stopping")
-					return
+                    stopPositionReportTimeout()
+                    updateWindowShadeArrived()
+					break
 				case DP_COMMAND_CLOSE: // 0x02
-                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: closing")
 					updateWindowShadeClosing()
-					return
+					break
 				case DP_COMMAND_CONTINUE: // 0x03
-                    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 					logDebug("parse: continuing")
 					return
 				default:
 					logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND dataValue=${dataValue}")
-					return
+					break
 			}
+            restartPositionReportTimeout()
+            break
 		
 		case DP_ID_TARGET_POSITION: // 0x02 Target position    // for new blinds models - this is the actual/current position !
 			if (dataValue >= 0 && dataValue <= 100) {
@@ -329,13 +332,13 @@ def parseSetDataResponse(descMap) {
                     dataValue = 100 - dataValue
                 }
 				logDebug("parse: moved to position ${dataValue}")
-                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+                restartPositionReportTimeout()
 				updateWindowShadeMoving(dataValue)
 				updatePosition(dataValue)
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_TARGET_POSITION dataValue=${dataValue}")
 			}
-			return
+			break
 		
 		case DP_ID_CURRENT_POSITION: // 0x03 Current Position
 			if (dataValue >= 0 && dataValue <= 100) {
@@ -343,13 +346,13 @@ def parseSetDataResponse(descMap) {
                     dataValue = 100 - dataValue
                 }
 				logDebug("parse: arrived at position ${dataValue}")
-                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+                restartPositionReportTimeout()
 				updateWindowShadeArrived(dataValue)
 				updatePosition(dataValue)
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_CURRENT_POSITION dataValue=${dataValue}")
 			}
-			return
+			break
 		
 		case DP_ID_DIRECTION: // 0x05 Direction
 			def directionText = DIRECTION_MAP[dataValue]
@@ -359,21 +362,20 @@ def parseSetDataResponse(descMap) {
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_DIRECTION dataValue=${dataValue}")
 			}
-			return
+			break
 		
 		case DP_ID_COMMAND_REMOTE: // 0x07 Remote Command
 			if (dataValue == 0) {
 				logDebug("parse: opening from remote")
-                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeOpening()
 			} else if (dataValue == 1) {
 				logDebug("parse: closing from remote")
-                runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
 				updateWindowShadeClosing()
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND_REMOTE dataValue=${dataValue}")
 			}
-			return
+            restartPositionReportTimeout()
+    		break
 		
 		case DP_ID_MODE: // 0x65 Mode
 			def modeText = MODE_MAP[dataValue]
@@ -383,7 +385,7 @@ def parseSetDataResponse(descMap) {
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_MODE dataValue=${dataValue}")
 			}
-			return
+			break
 		
 		case DP_ID_SPEED: // 0x69 Motor speed
 			if (dataValue >= 0 && dataValue <= 100) {
@@ -392,11 +394,11 @@ def parseSetDataResponse(descMap) {
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_SPEED dataValue=${dataValue}")
 			}
-			return
+			break
 		
 		default:
 			logUnexpectedMessage("parse: Unknown DP_ID dp=0x${data[2]}, dataType=0x${data[3]} dataValue=${dataValue}")
-			return
+			break
 	}
 }
 
@@ -497,7 +499,10 @@ private updateWindowShadeClosing() {
 	sendEvent(name:"windowShade", value: "closing")
 }
 
-private updateWindowShadeArrived(position) {
+private updateWindowShadeArrived(position=null) {
+    if (position == null)  {
+        position = device.currentValue("position")
+    }
 	logDebug("updateWindowShadeArrived: position=${position}")
 	if (position < 0 || position > 100) {
 		log.warn("updateWindowShadeArrived: Need to setup limits on device")
@@ -519,10 +524,11 @@ def close() {
     logDebug("close, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 0)
 	if (mode == MODE_TILT) {
-        	logDebug("close mode == MODE_TILT")
+      	logDebug("close mode == MODE_TILT")
 		setPosition(0)
-	} else {
-        runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+	} 
+    else {
+        restartPositionReportTimeout()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_CLOSE, 2)
 	}
 }
@@ -532,8 +538,9 @@ def open() {
 	//sendEvent(name: "position", value: 100)
 	if (mode == MODE_TILT) {
 		setPosition(100)
-	} else {
-        runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+	} 
+    else {
+        restartPositionReportTimeout()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_OPEN, 2)
 	}
 }
@@ -554,8 +561,8 @@ def startPositionChange(state) {
 
 def stopPositionChange() {
 	logDebug("stopPositionChange")
-    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
-	sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_STOP, 2)
+    restartPositionReportTimeout()
+    sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, DP_COMMAND_STOP, 2)
 }
 
 def setLevel( level )
@@ -585,9 +592,24 @@ def setPosition(position) {
     if ( invertPosition == true ) {
         position = 100 - position
     }
-    runInMillis(POSITION_UPDATE_TIMEOUT, endOfMovement, [overwrite: true])
+    restartPositionReportTimeout()
 	sendTuyaCommand(DP_ID_TARGET_POSITION, DP_TYPE_VALUE, position.intValue(), 8)
 }
+
+def restartPositionReportTimeout() {
+    def timeout = settings?.positionReportTimeout as Integer
+    if ( timeout > 100) { // milliseconds 
+        runInMillis(timeout, endOfMovement, [overwrite: true])
+    }
+    else {
+        stopPositionReportTimeout()
+    }
+}
+
+def stopPositionReportTimeout() {
+    unschedule(endOfMovement)
+}
+
 
 def stepClose(step) {
 	if (!step) {
@@ -639,6 +661,7 @@ def push(buttonNumber)		{
 
 
 def endOfMovement() {
+	logTrace("endOfMovement")
     updateWindowShadeArrived(device.currentValue("position"))
 }
 
