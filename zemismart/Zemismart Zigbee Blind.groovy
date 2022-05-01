@@ -17,8 +17,8 @@
  * https://github.com/zigpy/zha-device-handlers/blob/f3302257fbb57f9f9f99ecbdffdd2e7862cc1fd7/zhaquirks/tuya/__init__.py#L846
  *
  * VERSION HISTORY
- *                                          W.I.P : mixedDP2reporting (isTargetRcvd state);
- * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; 
+ *                                  TODO": 
+ * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; 
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
@@ -44,11 +44,11 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.4 - 2022-05-01 5:15 AM"
+	return "3.1.4 - 2022-05-01 9:07 PM"
 }
 
 private def textCopyright() {
-	return "Copyright ©2021\nAmos Yuen, iquix, ShinJjang"
+	return "Copyright ©2021\nAmos Yuen, kkossev, iquix, ShinJjang"
 }
 
 metadata {
@@ -78,9 +78,9 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_gubdgai2" ,deviceJoinName: "Zemismart Zigbee Blind Motor" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_iossyxra" ,deviceJoinName: "Zemismart Tubular Roller Blind Motor AM15" 
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_uzinxci0" ,deviceJoinName: "Zignito Tubular Roller Blind Motor AM15" 
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGZT"    // {0x0000: 0x0000, 0x0001: 0x0002, 0x0002: 0x0001}
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nueqqe6k" ,deviceJoinName: "Zemismart Zigbee Blind Motor M515EGZT"    // mixedDP2reporting; {0x0000: 0x0000, 0x0001: 0x0002, 0x0002: 0x0001}
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_yenbr4om" ,deviceJoinName: "Tuya Zigbee Blind Motor"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // mixedDP2reporting
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // supportDp1State
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_hsgrhjpf" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Zigbee Blind Motor"
@@ -145,41 +145,51 @@ def isCurtainMotor() {
 // Open - default 0x00
 def getDpCommandOpen() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) {
-        return 0x02
-    }
-    else {
-        DP_COMMAND_OPEN //0x00
-    }
+    if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) 
+        return DP_COMMAND_CLOSE //0x02
+    else
+        return DP_COMMAND_OPEN //0x00
 }
 
 // Stop - default 0x01
 def getDpCommandStop() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k"] ) {
-        return 0x02
-    }
-    else {
-        DP_COMMAND_STOP //0x01
-    }
+    if (manufacturer in ["_TZE200_nueqqe6k"]) 
+        return DP_COMMAND_CLOSE //0x02
+    else 
+        return DP_COMMAND_STOP //0x01
 }
 
 // Close - default 0x02
 def getDpCommandClose() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in _TZE200_nueqqe6k ) {
-        return 0x01
-    }
-    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3", "_TZE200_rddyvrci"] ) {
-        return 0x00
-    }
-    else {
-        DP_COMMAND_CLOSE //0x02
-    }
+    if (manufacturer in ["_TZE200_nueqqe6k"])
+        return DP_COMMAND_STOP //0x01
+    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3", "_TZE200_rddyvrci"])
+        return DP_COMMAND_OPEN //0x00
+    else
+        return DP_COMMAND_CLOSE //0x02
 }
 
+def isMixedDP2reporting() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_xuzcvlku", "_TZE200_nueqqe6k", "_TZE200_5sbebbzs"])
+        return true
+    else
+        return false
+}
 
+def isInvertedPositionReporting() {
+    def manufacturer = device.getDataValue("manufacturer")
+    if (manufacturer in ["_TZE200_xuzcvlku", "_TZE200_nueqqe6k", "_TZE200_5sbebbzs"])
+        return true
+    else
+        return false
+}
 
+def getPositionReportTimeout() {
+    return POSITION_UPDATE_TIMEOUT
+}
 
 //
 // Life Cycle
@@ -189,17 +199,20 @@ def installed() {
 	configure()
 }
 
+// This method is called when the preferences of a device are updated.
 def updated() {
-	configure()
+	configure(fullInit = false)
+    logDebug("updated ${device.displayName} model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}")
 }
 
-def configure() {
-	logDebug("configure")
+def configure(boolean fullInit = true) {
+    logDebug("configure ${device.displayName} model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} fullInit=${fullInit}")
 	state.version = textVersion()
 	state.copyright = textCopyright()
 
 	if (state.lastHeardMillis == null) 	state.lastHeardMillis = 0 
 	if (state.target == null || state.target <0 || state.target >100) 	state.target = 0 
+    state.isTargetRcvd = false
 
 	sendEvent(name: "numberOfButtons", value: 5)
 	if (device.currentValue("position") != null
@@ -226,11 +239,14 @@ def configure() {
 			+ " minOpenPosition \"${minOpenPosition}\".")
 	}
     
-    if (settings.enableInfoLog == null) device.updateSetting("enableInfoLog", [value: true, type: "bool"]) 
-    if (settings.advancedOptions == null) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
-    if (settings.invertPosition == null) device.updateSetting("invertPosition", [value: false, type: "bool"]) 
-    if (settings.positionReportTimeout == null) device.updateSetting("positionReportTimeout", [value: POSITION_UPDATE_TIMEOUT, type: "number"]) 
-    if (settings.mixedDP2reporting == null) device.updateSetting("mixedDP2reporting", [value: false, type: "bool"]) 
+    if (settings.enableInfoLog == null || fullInit == true) device.updateSetting("enableInfoLog", [value: true, type: "bool"]) 
+    if (settings.advancedOptions == null || fullInit == true) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
+    
+    // Reset the Advanced Options parameters to their default values depending on the model/manufacturer
+    if (settings.mixedDP2reporting == null || fullInit == true) device.updateSetting("mixedDP2reporting", [value: isMixedDP2reporting(), type: "bool"]) 
+    if (settings.invertPosition == null || fullInit == true) device.updateSetting("invertPosition", [value: isInvertedPositionReporting(), type: "bool"]) 
+    if (settings.positionReportTimeout == null || fullInit == true) device.updateSetting("positionReportTimeout", [value: getPositionReportTimeout(), type: "number"]) 
+    
     
 }
 
@@ -242,7 +258,7 @@ def setDirection() {
 
 def setMode() {
 	def modeValue = mode as int
-	logDebug("setMode: modeText=${MODE_MAP[mode]}, modeValue=${modeValue}")
+	logDebug("setMode: modeText=${MODE_MAP[modeValue].value}, modeValue=${modeValue}")
 	sendTuyaCommand(DP_ID_MODE, DP_TYPE_ENUM, modeValue, 2)
 }
 
@@ -330,23 +346,22 @@ def parseSetDataResponse(descMap) {
 	def dataValue = zigbee.convertHexToInt(data[6..-1].join())
 	switch (dp) {
 		case DP_ID_COMMAND: // 0x01 Command
-            if (dataValue == getDpCommandOpen()) {        // typically 0x00
-    			logDebug("parse: opening")
-                restartPositionReportTimeout()
+            restartPositionReportTimeout()
+            if (dataValue == getDpCommandOpen()) {        // OPEN - typically 0x00
+                logDebug("parse: opening (DP=1, data=${dataValue})")
 				updateWindowShadeOpening()
             }
-            else if (dataValue == getDpCommandStop()) {    // typically 0x01
-				logDebug("parse: stopping")
-                stopPositionReportTimeout()
-                updateWindowShadeArrived()
+            else if (dataValue == getDpCommandStop()) {    // STOP - typically 0x01
+				logDebug("parse: stopping (DP=1, data=${dataValue})")
+                //stopPositionReportTimeout()
+                //updateWindowShadeArrived()
             }
-            else if (dataValue == getDpCommandClose()) {   // typically 0x02
-				logDebug("parse: closing")
-                restartPositionReportTimeout()
+            else if (dataValue == getDpCommandClose()) {   // CLOSE - typically 0x02
+				logDebug("parse: closing (DP=1, data=${dataValue})")
 				updateWindowShadeClosing()
             }
-            else if (dataValue == DP_COMMAND_CONTINUE) {    // 0x03
-				logDebug("parse: continuing")
+            else if (dataValue == DP_COMMAND_CONTINUE) {   // CONTINUE - 0x03
+				logDebug("parse: continuing (DP=1, data=${dataValue})")
             }
             else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_COMMAND dataValue=${dataValue}")
@@ -358,10 +373,17 @@ def parseSetDataResponse(descMap) {
                 if ( invertPosition == true ) {
                     dataValue = 100 - dataValue
                 }
-				logDebug("parse: moved to position ${dataValue}")
                 restartPositionReportTimeout()
-				updateWindowShadeMoving(dataValue)
-				updatePosition(dataValue)
+                if (mixedDP2reporting == true  && state.isTargetRcvd == false && dataValue == state.target)
+                {
+                    logDebug("parse: received target ${dataValue}, set target was ${state.target}")
+                }
+                else {
+    				logDebug("parse: moved to position ${dataValue}")
+    				updateWindowShadeMoving(dataValue)
+    				updatePosition(dataValue)
+                }
+                state.isTargetRcvd = true
 			} else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_TARGET_POSITION dataValue=${dataValue}")
 			}
@@ -500,7 +522,7 @@ private updatePosition(position) {
 }
 
 private updatePresence(present) {
-	logTrace("updatePresence: present=${present}")
+	//logTrace("updatePresence: present=${present}")
 	if (present) {
 		state.lastHeardMillis = now()
 		checkHeartbeat()
@@ -559,6 +581,7 @@ private updateWindowShadeArrived(position=null) {
 def close() {
     logDebug("close, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 0)
+    state.isTargetRcvd = false 
 	if (mode == MODE_TILT) {
       	logDebug("close mode == MODE_TILT")
 		setPosition(0)
@@ -574,6 +597,7 @@ def close() {
 def open() {
 	logDebug("open, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 100)
+    state.isTargetRcvd = false 
 	if (mode == MODE_TILT) {
 		setPosition(100)
 	} 
@@ -594,7 +618,7 @@ def off() {
 }
 
 def startPositionChange(state) {
-    logDebug("startPositionChange state=${state}")
+    logDebug("startPositionChange: ${state}")
 	switch (state) {
 		case "close" :
 			close()
@@ -629,6 +653,7 @@ def setPosition(position) {
 	    //	sendEvent(name: "position", value: position)
         logDebug("setPosition: no need to move!")
         updateWindowShadeArrived(position)
+        state.isTargetRcvd = false 
         return null
 	}
     Integer currentPosition = device.currentValue("position")
@@ -638,11 +663,12 @@ def setPosition(position) {
     else if(position < currentPosition) {
         sendEvent(name: "windowShade", value: "closing")
     }    
-    logDebug("setPosition: position=${position}, currentPosition=${device.currentValue('position')}")
+    logDebug("setPosition: target is ${position}, currentPosition=${device.currentValue('position')}")
     if ( invertPosition == true ) {
         position = 100 - position
     }
     restartPositionReportTimeout()
+    state.isTargetRcvd = false 
 	sendTuyaCommand(DP_ID_TARGET_POSITION, DP_TYPE_VALUE, position.intValue(), 8)
 }
 
