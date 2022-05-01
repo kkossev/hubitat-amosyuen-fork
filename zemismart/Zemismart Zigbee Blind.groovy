@@ -17,8 +17,9 @@
  * https://github.com/zigpy/zha-device-handlers/blob/f3302257fbb57f9f9f99ecbdffdd2e7862cc1fd7/zhaquirks/tuya/__init__.py#L846
  *
  * VERSION HISTORY
- *
- * 3.1.3 (2022-04-30) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
+ *                                          W.I.P : mixedDP2reporting (isTargetRcvd state);
+ * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; 
+ * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
  * 3.1.0 (2022-04-07) [kkossev]   - added new devices fingerprints; blind position reporting; Tuya time synchronization;  
@@ -43,7 +44,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.3 - 2022-04-30 10:59 PM"
+	return "3.1.4 - 2022-05-01 5:15 AM"
 }
 
 private def textCopyright() {
@@ -64,22 +65,10 @@ metadata {
 
 		attribute "speed", "integer"
 
-		command "push", [[
-			name: "button number*",
-			type: "NUMBER",
-			description: "1: Open, 2: Close, 3: Stop, 4: Step Open, 5: Step Close"]]
-		command "stepClose", [[
-			name: "step",
-			type: "NUMBER",
-			description: "Amount to change position towards close. Defaults to defaultStepAmount if not set."]]
-		command "stepOpen", [[
-			name: "step",
-			type: "NUMBER",
-			description: "Amount to change position towards open. Defaults to defaultStepAmount if not set."]]
-		command "setSpeed", [[
-			name: "speed*",
-			type: "NUMBER",
-			description: "Motor speed (0 to 100). Values below 5 may not work."]]
+		command "push", [[name: "button number*", type: "NUMBER", description: "1: Open, 2: Close, 3: Stop, 4: Step Open, 5: Step Close"]]
+		command "stepClose", [[name: "step", type: "NUMBER", description: "Amount to change position towards close. Defaults to defaultStepAmount if not set."]]
+		command "stepOpen", [[name: "step",	type: "NUMBER",	description: "Amount to change position towards open. Defaults to defaultStepAmount if not set."]]
+		command "setSpeed", [[name: "speed*", type: "NUMBER", description: "Motor speed (0 to 100). Values below 5 may not work."]]
 
 		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019",      model:"mcdj3aq",manufacturer:"_TYST11_wmcdj3aq", deviceJoinName: "Zemismart Zigbee Blind"             // direction is reversed ?
 		fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019",      model:"owvfni3",manufacturer:"_TYST11_cowvfr",   deviceJoinName: "Zemismart Zigbee Curtain Motor"
@@ -101,7 +90,7 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_wmcdj3aq" ,deviceJoinName: "Tuya Zigbee Blind Motor"           // !!! close: 0, open: 2, stop: 1
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_cowvfni3" ,deviceJoinName: "Zemismart Zigbee Curtain Motor"    // !!! close: 0, open: 2, stop: 1 Curtain Motor
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TYST11_cowvfni3" ,deviceJoinName: "Zemismart Zigbee Curtain Motor"    // !!! close: 0, open: 2, stop: 1 Curtain Motor
-        // defaults are : close: 2, open: 0, stop: 1        
+        // defaults are :  open: 0, stop: 1,  close: 2   
 	}
 
 	preferences {
@@ -121,12 +110,13 @@ metadata {
 		input("defaultStepAmount", "number", title: "Default Step Amount",
 			description: "The default step amount",
 			required: true, defaultValue: 5)
+		input("enableInfoLog", "bool", title: "Enable descriptionText logging", required: true, defaultValue: true)
 		input("enableDebugLog", "bool", title: "Enable debug logging", required: true, defaultValue: false)
-		input("enableTraceLog", "bool", title: "Enable trace logging", required: true, defaultValue: false)
-		input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
 		input("advancedOptions", "bool", title: "Show Advanced options", description: "These advanced options should have been already set correctly for your device/model when device was Configred", required: true, defaultValue: false)
 
         if (advancedOptions == true) {
+    		input("enableTraceLog", "bool", title: "Enable trace logging", required: true, defaultValue: false)
+	    	input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
     		input ("invertPosition", "bool", title: "Invert position reporting", description: "Some devices report the position 0..100 inverted", required: true, defaultValue: true)
     		input ("positionReportTimeout", "number", title: "Position report timeout, ms", description: "The maximum time between position reports", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
     		input ("mixedDP2reporting", "bool", title: "Ignire the first Position report",  description: "Some devices report both the Target and the Current positions the same way", required: true, defaultValue: false)
@@ -208,9 +198,8 @@ def configure() {
 	state.version = textVersion()
 	state.copyright = textCopyright()
 
-	if (state.lastHeardMillis == null) {
-		state.lastHeardMillis = 0
-	}
+	if (state.lastHeardMillis == null) 	state.lastHeardMillis = 0 
+	if (state.target == null || state.target <0 || state.target >100) 	state.target = 0 
 
 	sendEvent(name: "numberOfButtons", value: 5)
 	if (device.currentValue("position") != null
@@ -236,6 +225,8 @@ def configure() {
 		throw new Exception("maxClosedPosition \"${minOpenPosition}\" must be less than"
 			+ " minOpenPosition \"${minOpenPosition}\".")
 	}
+    
+    if (settings.enableInfoLog == null) device.updateSetting("enableInfoLog", [value: true, type: "bool"]) 
     if (settings.advancedOptions == null) device.updateSetting("advancedOptions", [value: false, type: "bool"]) 
     if (settings.invertPosition == null) device.updateSetting("invertPosition", [value: false, type: "bool"]) 
     if (settings.positionReportTimeout == null) device.updateSetting("positionReportTimeout", [value: POSITION_UPDATE_TIMEOUT, type: "number"]) 
@@ -287,13 +278,13 @@ def setMode() {
 def parse(String description) {
 	if (description == null || (!description.startsWith('catchall:') && !description.startsWith('read attr -'))) {
 		logUnexpectedMessage("parse: Unhandled description=${description}")
-		return
+		return null
 	}
 	updatePresence(true)
 	Map descMap = zigbee.parseDescriptionAsMap(description)
 	if (descMap.clusterInt != CLUSTER_TUYA) {
 		logUnexpectedMessage("parse: Not a Tuya Message descMap=${descMap}")
-		return
+		return null
 	}
 	def command = zigbee.convertHexToInt(descMap.command)
 	switch (command) {
@@ -301,26 +292,26 @@ def parse(String description) {
         case ZIGBEE_COMMAND_REPORTING : // 0x01
 			if (!descMap?.data || descMap.data.size() < 7) {
                 logUnexpectedMessage("parse: Invalid data size for SET_DATA_RESPONSE descMap=${descMap}")
-				return
+				return null
 			}
 			parseSetDataResponse(descMap)
-			return
+			break
 		case ZIGBEE_COMMAND_ACK: // 0x0B
 			if (!descMap?.data || descMap.data.size() < 2) {
 				logUnexpectedMessage("parse: Invalid data size for ACK descMap=${descMap}")
-				return
+				return null
 			}
 			def ackCommand = zigbee.convertHexToInt(descMap.data.join())
 	        logTrace("parse: ACK command=${ackCommand}")
-			return
+			break
 		case ZIGBEE_COMMAND_SET_TIME: // 0x24
 			// Data payload seems to increment every hour but doesn't seem to be an absolute value
 	        logTrace("parse: SET_TIME data=${descMap.data}")
             processTuyaSetTime()
-			return
+			break
 		default:
 			logUnexpectedMessage("parse: Unhandled command=${command} descMap=${descMap}")
-			return
+			break
 	}
 }
 
@@ -443,7 +434,7 @@ def parseSetDataResponse(descMap) {
 }
 
 def processTuyaSetTime() {
-    logDebug("${device.displayName} time synchronization request")    
+    logDebug("${device.displayName} time synchronization request")    // every 61 minutes
     def offset = 0
     try {
         offset = location.getTimeZone().getOffset(new Date().getTime())
@@ -493,7 +484,7 @@ private updateMode(modeValue) {
 }
 
 private updatePosition(position) {
-	logDebug("updatePosition: position=${position}")
+	logTrace("updatePosition: position=${position}")
 	sendEvent(name: "position", value: position, unit: "%")
 	sendEvent(name: "level", value: position, unit: "%")
     if (position <= maxClosedPosition) {
@@ -505,12 +496,11 @@ private updatePosition(position) {
 	if (isWithinOne(position)) {
     	logDebug("updatePosition: <b>arrived!</b>")
         updateWindowShadeArrived(position)
-        return
 	}    
 }
 
 private updatePresence(present) {
-	logDebug("updatePresence: present=${present}")
+	logTrace("updatePresence: present=${present}")
 	if (present) {
 		state.lastHeardMillis = now()
 		checkHeartbeat()
@@ -526,7 +516,7 @@ private updateSpeed(speed) {
 
 private updateWindowShadeMoving(position) {
 	def lastPosition = device.currentValue("position")
-	logDebug("updateWindowShadeMoving: position=${position} (lastPosition=${lastPosition})")
+    logDebug("updateWindowShadeMoving: position=${position} (lastPosition=${lastPosition}), target=${state.target}")
 
 	if (lastPosition < position) {
 		updateWindowShadeOpening()
@@ -574,6 +564,7 @@ def close() {
 		setPosition(0)
 	} 
     else {
+        state.target = 0
         restartPositionReportTimeout()
         def dpCommandClose = getDpCommandClose()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandClose, 2)
@@ -587,6 +578,7 @@ def open() {
 		setPosition(100)
 	} 
     else {
+        state.target = 100
         restartPositionReportTimeout()
         def dpCommandOpen = getDpCommandOpen()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandOpen, 2)
@@ -631,12 +623,13 @@ def setPosition(position) {
 	if (position < 0 || position > 100) {
 		throw new Exception("Invalid position ${position}. Position must be between 0 and 100 inclusive.")
 	}
+    state.target = position
 	if (isWithinOne(position)) {
 	    // Motor is off by one sometimes, so set it to desired value if within one
 	    //	sendEvent(name: "position", value: position)
         logDebug("setPosition: no need to move!")
         updateWindowShadeArrived(position)
-        return
+        return null
 	}
     Integer currentPosition = device.currentValue("position")
     if(position > currentPosition) {
@@ -751,7 +744,7 @@ private randomPacketId() {
 def checkForResponse() {
 	//logTrace("checkForResponse: waitingForResponseSinceMillis=${state.waitingForResponseSinceMillis}")
 	if (state.waitingForResponseSinceMillis == null) {
-		return
+		return null
 	}
 	def waitMillis = (CHECK_FOR_RESPONSE_INTERVAL_SECONDS * 1000
 			- (now() - state.waitingForResponseSinceMillis))
@@ -773,6 +766,13 @@ def checkHeartbeat() {
 	} else {
 		runInMillis(waitMillis, checkHeartbeat, [overwrite: true])
 	}
+}
+
+private logInfo(text) {
+	if (!enableInfoLog) {
+		return
+	}
+	log.info(text)
 }
 
 private logDebug(text) {
