@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *                                  TODO": 
- * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; 
+ * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
@@ -44,7 +44,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.4 - 2022-05-01 9:07 PM"
+	return "3.1.4 - 2022-05-01 10:10 PM"
 }
 
 private def textCopyright() {
@@ -119,7 +119,7 @@ metadata {
 	    	input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
     		input ("invertPosition", "bool", title: "Invert position reporting", description: "Some devices report the position 0..100 inverted", required: true, defaultValue: true)
     		input ("positionReportTimeout", "number", title: "Position report timeout, ms", description: "The maximum time between position reports", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
-    		input ("mixedDP2reporting", "bool", title: "Ignire the first Position report",  description: "Some devices report both the Target and the Current positions the same way", required: true, defaultValue: false)
+    		input ("mixedDP2reporting", "bool", title: "Ignore the first Position report",  description: "Some devices report both the Target and the Current positions the same way", required: true, defaultValue: false)
         }
         
 	}
@@ -206,7 +206,6 @@ def updated() {
 }
 
 def configure(boolean fullInit = true) {
-    logDebug("configure ${device.displayName} model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} fullInit=${fullInit}")
 	state.version = textVersion()
 	state.copyright = textCopyright()
 
@@ -215,12 +214,14 @@ def configure(boolean fullInit = true) {
     state.isTargetRcvd = false
 
 	sendEvent(name: "numberOfButtons", value: 5)
+    /*
 	if (device.currentValue("position") != null
         && (device.currentValue("windowShade") == "closed"
             || device.currentValue("windowShade") == "open"
             || device.currentValue("windowShade") == "partially open")) {
 		updateWindowShadeArrived(device.currentValue("position"))
 	}
+    */
 
 	// Must run async otherwise, one will block the other
 	runIn(1, setMode)
@@ -247,7 +248,7 @@ def configure(boolean fullInit = true) {
     if (settings.invertPosition == null || fullInit == true) device.updateSetting("invertPosition", [value: isInvertedPositionReporting(), type: "bool"]) 
     if (settings.positionReportTimeout == null || fullInit == true) device.updateSetting("positionReportTimeout", [value: getPositionReportTimeout(), type: "number"]) 
     
-    
+    logInfo("${device.displayName} configured : model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} fullInit=${fullInit}")
 }
 
 def setDirection() {
@@ -549,12 +550,18 @@ private updateWindowShadeMoving(position) {
 
 private updateWindowShadeOpening() {
 	logTrace("updateWindowShadeOpening")
-	sendEvent(name:"windowShade", value: "opening")
+    if (device.currentValue("windowShade") != "opening") {
+	    sendEvent(name:"windowShade", value: "opening")
+        logInfo("${device.displayName} is opening")
+    }
 }
 
 private updateWindowShadeClosing() {
 	logTrace("updateWindowShadeClosing")
-	sendEvent(name:"windowShade", value: "closing")
+    if (device.currentValue("windowShade") != "closing") {
+    	sendEvent(name:"windowShade", value: "closing")
+        logInfo("${device.displayName} is closing")
+    }
 }
 
 private updateWindowShadeArrived(position=null) {
@@ -565,12 +572,16 @@ private updateWindowShadeArrived(position=null) {
 	if (position < 0 || position > 100) {
 		log.warn("updateWindowShadeArrived: Need to setup limits on device")
 		sendEvent(name: "windowShade", value: "unknown")
+        logInfo("${device.displayName} windowShade is unknown")
 	} else if (position <= maxClosedPosition) {
 		sendEvent(name: "windowShade", value: "closed")
+        logInfo("${device.displayName} is closed")
 	} else if (position >= minOpenPosition) {
 		sendEvent(name: "windowShade", value: "open")
+        logInfo("${device.displayName} is open")
 	} else {
 		sendEvent(name: "windowShade", value: "partially open")
+        logInfo("${device.displayName} is partially open ${position}%")
 	}
 }
 
@@ -656,6 +667,8 @@ def setPosition(position) {
         state.isTargetRcvd = false 
         return null
 	}
+    updateWindowShadeMoving( position )
+    /*
     Integer currentPosition = device.currentValue("position")
     if(position > currentPosition) {
         sendEvent(name: "windowShade", value: "opening")
@@ -663,6 +676,7 @@ def setPosition(position) {
     else if(position < currentPosition) {
         sendEvent(name: "windowShade", value: "closing")
     }    
+    */
     logDebug("setPosition: target is ${position}, currentPosition=${device.currentValue('position')}")
     if ( invertPosition == true ) {
         position = 100 - position
