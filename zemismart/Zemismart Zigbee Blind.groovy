@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *                                  
- * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: 
+ * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: added Refresh and Battery capabilities;
  * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
@@ -45,7 +45,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.5 - 2022-05-02 8:14 PM"
+	return "3.1.5 - 2022-05-02 8:55 PM"
 }
 
 private def textCopyright() {
@@ -59,9 +59,10 @@ metadata {
 		capability "PresenceSensor"
 		capability "PushableButton"
 		capability "WindowShade"
+        capability "Refresh"
         capability "Switch"
-        capability "SwitchLevel"      // level - NUMBER, unit:%; setLevel(level, duration); level required (NUMBER) - Level to set (0 to 100); duration optional (NUMBER) - Transition duration in seconds
-        //capability "ChangeLevel"    // startLevelChange(direction); direction required (ENUM) - Direction for level change request; stopLevelChange()
+        capability "SwitchLevel"
+        capability "Battery"
 
 		attribute "speed", "integer"
 
@@ -285,6 +286,7 @@ def setMode() {
 @Field final int DP_ID_COMMAND_REMOTE = 0x07
 @Field final int DP_ID_MODE = 0x65
 @Field final int DP_ID_SPEED = 0x69
+@Field final int DP_ID_BATTERY = 0x0D
 
 @Field final int DP_TYPE_BOOL = 0x01
 @Field final int DP_TYPE_VALUE = 0x02
@@ -357,8 +359,6 @@ def parseSetDataResponse(descMap) {
             }
             else if (dataValue == getDpCommandStop()) {    // STOP - typically 0x01
 				logDebug("parse: stopping (DP=1, data=${dataValue})")
-                //stopPositionReportTimeout()
-                //updateWindowShadeArrived()
             }
             else if (dataValue == getDpCommandClose()) {   // CLOSE - typically 0x02
 				logDebug("parse: closing (DP=1, data=${dataValue})")
@@ -452,6 +452,15 @@ def parseSetDataResponse(descMap) {
 				logUnexpectedMessage("parse: Unexpected DP_ID_SPEED dataValue=${dataValue}")
 			}
 			break
+			
+        case DP_ID_BATTERY: // 0xOD Battery
+			if (dataValue >= 0 && dataValue <= 100) {
+				logDebug("parse: battery=${dataValue}")
+				updateBattery(dataValue)
+			} else {
+				logUnexpectedMessage("parse: Unexpected DP_ID_BATTERY dataValue=${dataValue}")
+			}
+			break
 		
 		default:
 			logUnexpectedMessage("parse: Unknown DP_ID dp=0x${data[2]}, dataType=0x${data[3]} dataValue=${dataValue}")
@@ -540,6 +549,11 @@ private updateSpeed(speed) {
 	sendEvent(name: "speed", value: speed)
 }
 
+private updateBattery(battery) {
+	logDebug("updateBattery: battery=${battery}")
+	sendEvent(name: "battery", value: battery)
+}
+
 private updateWindowShadeMoving(position) {
 	def lastPosition = device.currentValue("position")
     logDebug("updateWindowShadeMoving: position=${position} (lastPosition=${lastPosition}), target=${state.target}")
@@ -591,6 +605,12 @@ private updateWindowShadeArrived(position=null) {
 //
 // Actions
 //
+
+def refresh()
+{
+	logTrace "Refresh called..."
+	zigbee.onOffRefresh()
+}
 
 def close() {
     logDebug("close, direction = ${direction as int}")
@@ -652,7 +672,7 @@ def stopPositionChange() {
     sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandStop, 2)
 }
 
-def setLevel( level )
+def setLevel( level, duration = null )
 {
     setPosition(level)
 }
@@ -671,15 +691,6 @@ def setPosition(position) {
         return null
 	}
     updateWindowShadeMoving( position )
-    /*
-    Integer currentPosition = device.currentValue("position")
-    if(position > currentPosition) {
-        sendEvent(name: "windowShade", value: "opening")
-    } 
-    else if(position < currentPosition) {
-        sendEvent(name: "windowShade", value: "closing")
-    }    
-    */
     logDebug("setPosition: target is ${position}, currentPosition=${device.currentValue('position')}")
     if ( invertPosition == true ) {
         position = 100 - position
