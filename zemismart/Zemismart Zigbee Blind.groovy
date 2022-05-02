@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *                                  TODO": 
- * 3.1.4 (2022-05-01) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging
+ * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
  * 3.1.1 (2022-04-26) [kkossev]   - added more TS0601 fingerprints; atomicState bug fix; added invertPosition option; added 'SwitchLevel' capability (Alexa); added POSITION_UPDATE_TIMEOUT timer
@@ -44,7 +44,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.4 - 2022-05-01 10:10 PM"
+	return "3.1.4 - 2022-05-02 10:12 AM"
 }
 
 private def textCopyright() {
@@ -52,8 +52,7 @@ private def textCopyright() {
 }
 
 metadata {
-	definition(name: "ZemiSmart Zigbee Blind", namespace: "amosyuen", author: "Amos Yuen",
-			ocfDeviceType: "oic.d.blind", vid: "generic-shade") {
+	definition(name: "ZemiSmart Zigbee Blind", namespace: "amosyuen", author: "Amos Yuen", importUrl: "https://raw.githubusercontent.com/kkossev/hubitat-amosyuen-fork/main/zemismart/Zemismart%20Zigbee%20Blind.groovy", singleThreaded: true ) {
 		capability "Actuator"
 		capability "Configuration"
 		capability "PresenceSensor"
@@ -202,7 +201,7 @@ def installed() {
 // This method is called when the preferences of a device are updated.
 def updated() {
 	configure(fullInit = false)
-    logDebug("updated ${device.displayName} model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}")
+    logDebug("updated ${device.displayName} model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}")
 }
 
 def configure(boolean fullInit = true) {
@@ -248,7 +247,8 @@ def configure(boolean fullInit = true) {
     if (settings.invertPosition == null || fullInit == true) device.updateSetting("invertPosition", [value: isInvertedPositionReporting(), type: "bool"]) 
     if (settings.positionReportTimeout == null || fullInit == true) device.updateSetting("positionReportTimeout", [value: getPositionReportTimeout(), type: "number"]) 
     
-    logInfo("${device.displayName} configured : model={device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')} fullInit=${fullInit}")
+    logInfo("${device.displayName} configured : model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}")
+    logDebug(" fullInit=${fullInit} invertPosition=${settings.invertPosition } positionReportTimeout=${positionReportTimeout} mixedDP2reporting=${settings.mixedDP2reporting}")
 }
 
 def setDirection() {
