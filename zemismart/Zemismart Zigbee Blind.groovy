@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *                                  
- * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: added Refresh and Battery capabilities;
+ * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: added Refresh and Battery capabilities; mixedDP2reporting logic rewritten
  * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
@@ -45,7 +45,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.5 - 2022-05-02 8:55 PM"
+	return "3.1.5 - 2022-05-02 11:16 PM"
 }
 
 private def textCopyright() {
@@ -59,7 +59,7 @@ metadata {
 		capability "PresenceSensor"
 		capability "PushableButton"
 		capability "WindowShade"
-        capability "Refresh"
+        //capability "Refresh"
         capability "Switch"
         capability "SwitchLevel"
         capability "Battery"
@@ -378,17 +378,29 @@ def parseSetDataResponse(descMap) {
                     dataValue = 100 - dataValue
                 }
                 restartPositionReportTimeout()
-                if (mixedDP2reporting == true  && state.isTargetRcvd == false && dataValue == state.target)
-                {
-                    logDebug("parse: received target ${dataValue}, set target was ${state.target}")
+                if (mixedDP2reporting == true) {
+                    if (state.isTargetRcvd == false) {        // only for setPosition commands; Open and Close do not report the target pos!
+                        if (dataValue == state.target) {
+                            logDebug("parse: received target ${dataValue} from mixedDP2reporting device")
+                        }
+                        else {
+            				logUnexpectedMessage("parse: received target ${dataValue} from mixedDP2reporting device, <b>set target was ${state.target}</b>")
+                        }
+                        state.isTargetRcvd = true
+                    }
+                    else {
+                        logTrace("parse: reveived current position ${dataValue} from mixedDP2reporting device")
+        				logDebug("parse: moved to position ${dataValue}")
+        				updateWindowShadeMoving(dataValue)
+        				updatePosition(dataValue)
+                    }
                 }
-                else {
-    				logDebug("parse: moved to position ${dataValue}")
-    				updateWindowShadeMoving(dataValue)
-    				updatePosition(dataValue)
+                else {                                        // for all other models - this is the Target position 
+                    logDebug("parse: received target ${dataValue}")
+                    state.isTargetRcvd = true
                 }
-                state.isTargetRcvd = true
-			} else {
+			} 
+            else {
 				logUnexpectedMessage("parse: Unexpected DP_ID_TARGET_POSITION dataValue=${dataValue}")
 			}
 			break
@@ -398,7 +410,7 @@ def parseSetDataResponse(descMap) {
                 if ( invertPosition == true ) {
                     dataValue = 100 - dataValue
                 }
-				logDebug("parse: arrived at position ${dataValue}")
+				logDebug("parse: arrived at position ${dataValue}")    // for AM43 this is received just once, when arrived at the destination point!
                 restartPositionReportTimeout()
 				updateWindowShadeArrived(dataValue)
 				updatePosition(dataValue)
@@ -615,13 +627,13 @@ def refresh()
 def close() {
     logDebug("close, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 0)
-    state.isTargetRcvd = false 
 	if (mode == MODE_TILT) {
       	logDebug("close mode == MODE_TILT")
 		setPosition(0)
 	} 
     else {
         state.target = 0
+        state.isTargetRcvd = true 
         restartPositionReportTimeout()
         def dpCommandClose = getDpCommandClose()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandClose, 2)
@@ -631,12 +643,13 @@ def close() {
 def open() {
 	logDebug("open, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 100)
-    state.isTargetRcvd = false 
 	if (mode == MODE_TILT) {
+      	logDebug("open mode == MODE_TILT")
 		setPosition(100)
 	} 
     else {
         state.target = 100
+        state.isTargetRcvd = true 
         restartPositionReportTimeout()
         def dpCommandOpen = getDpCommandOpen()
         sendTuyaCommand(DP_ID_COMMAND, DP_TYPE_ENUM, dpCommandOpen, 2)
