@@ -17,7 +17,8 @@
  * https://github.com/zigpy/zha-device-handlers/blob/f3302257fbb57f9f9f99ecbdffdd2e7862cc1fd7/zhaquirks/tuya/__init__.py#L846
  *
  * VERSION HISTORY
- *                                  TODO": 
+ *                                  
+ * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: 
  * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
  * 3.1.3 (2022-05-01) [kkossev]   - _TZE200_nueqqe6k and _TZE200_rddyvrci O/C/S commands correction; startPositionChange bug fix;
  * 3.1.2 (2022-04-30) [kkossev]   - added AdvancedOptions; positionReportTimeout as preference parameter; added Switch capability; commands Open/Close/Stop differ depending on the model/manufacturer
@@ -44,7 +45,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.4 - 2022-05-02 10:12 AM"
+	return "3.1.5 - 2022-05-02 8:14 PM"
 }
 
 private def textCopyright() {
@@ -155,6 +156,8 @@ def getDpCommandStop() {
     def manufacturer = device.getDataValue("manufacturer")
     if (manufacturer in ["_TZE200_nueqqe6k"]) 
         return DP_COMMAND_CLOSE //0x02
+    else if (manufacturer in ["_TZE200_rddyvrci"]) 
+        return DP_COMMAND_OPEN //0x00
     else 
         return DP_COMMAND_STOP //0x01
 }
@@ -162,9 +165,9 @@ def getDpCommandStop() {
 // Close - default 0x02
 def getDpCommandClose() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k"])
+    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_rddyvrci"])
         return DP_COMMAND_STOP //0x01
-    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3", "_TZE200_rddyvrci"])
+    else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"])
         return DP_COMMAND_OPEN //0x00
     else
         return DP_COMMAND_CLOSE //0x02
