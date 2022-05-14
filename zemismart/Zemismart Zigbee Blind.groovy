@@ -160,10 +160,9 @@ def getDpCommandOpen() {
 // Stop - default 0x01
 def getDpCommandStop() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_zah67ekd", "_TZE200_xuzcvlku", "_TZE200_3i3exuay", "_TZE200_zpzndjez", "_TZE200_yenbr4om", "_TZE200_5sbebbzs", "_TZE200_xaabybja", "_TZE200_hsgrhjpf", "_TZE200_iossyxra",
-                        "_TZE200_68nvbio9", "_TZE200_zuz7f94z", "_TZE200_ergbiejo", "_TZE200_nhyj64w2"]) 
+    if (manufacturer in ["_TZE200_nueqqe6k"]) 
         return DP_COMMAND_CLOSE //0x02
-    else if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_fzo2pocs"]) 
+    else if (manufacturer in ["_TZE200_rddyvrci"]) 
         return DP_COMMAND_OPEN //0x00
     else 
         return DP_COMMAND_STOP //0x01
@@ -172,8 +171,7 @@ def getDpCommandStop() {
 // Close - default 0x02
 def getDpCommandClose() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_rddyvrci", "_TZE200_zah67ekd", "_TZE200_fzo2pocs", "_TZE200_xuzcvlku", "_TZE200_3i3exuay", "_TZE200_zpzndjez", "_TZE200_yenbr4om", "_TZE200_5sbebbzs", "_TZE200_xaabybja",
-                        "_TZE200_hsgrhjpf", "_TZE200_iossyxra", "_TZE200_68nvbio9", "_TZE200_zuz7f94z", "_TZE200_ergbiejo", "_TZE200_nhyj64w2"])
+    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_rddyvrci"])
         return DP_COMMAND_STOP //0x01
     else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"])
         return DP_COMMAND_OPEN //0x00
