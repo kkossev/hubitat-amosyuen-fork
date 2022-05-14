@@ -18,7 +18,7 @@
  *
  * VERSION HISTORY
  *                                  
- * 3.1.7 (2022-05-14) [kkossev]   - _TZE200_fzo2pocs ZM25TQ Tubular motor test; reversed O/S/C commands bug fix;
+ * 3.1.7 (2022-05-14) [kkossev]   - _TZE200_fzo2pocs ZM25TQ Tubular motor test; reversed O/S/C commands bug fix; added new option 'Replace Open/Close with SetPosition command'
  * 3.1.6 (2022-05-13) [kkossev]   - _TZE200_gubdgai2 defaults fixed; 4 new models fingerprints and defaults added.
  * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: added Refresh and Battery capabilities; mixedDP2reporting logic rewritten
  * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
@@ -47,7 +47,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.7 - 2022-05-14 9:22 AM"
+	return "3.1.7 - 2022-05-14 11:05 AM"
 }
 
 private def textCopyright() {
@@ -86,7 +86,7 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5sbebbzs" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // mixedDP2reporting
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_xaabybja" ,deviceJoinName: "Tuya Zigbee Blind Motor"    // supportDp1State
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_hsgrhjpf" ,deviceJoinName: "Tuya Zigbee Blind Motor"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_68nvbio9" ,deviceJoinName: "Tuya Tubular Motor ZM25EL"         // default commands https://www.aliexpress.com/item/1005001874380608.html
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zuz7f94z" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_ergbiejo" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rddyvrci" ,deviceJoinName: "Zemismart Zigbee Blind Motor AM43" // !!! close: 1, open: 2, stop: 0
@@ -97,8 +97,11 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_3i3exuay" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zpzndjez" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nhyj64w2" ,deviceJoinName: "Tuya Zigbee Blind Motor"
-        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,000A,0004,0005,EF00", outClusters:"0019", model:"TS0601", manufacturer:"_TZE200_fzo2pocs" ,deviceJoinName: "Zemismart ZM25TQ Tubular motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,000A,0004,0005,EF00", outClusters:"0019", model:"TS0601", manufacturer:"_TZE200_fzo2pocs" ,deviceJoinName: "Zemismart ZM25TQ Tubular motor"    // inverted reporting; default O/C/S
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,000A,0004,0005,EF00", outClusters:"0019", model:"TS0601", manufacturer:"_TZE200_4vobcgd3" ,deviceJoinName: "Zemismart Zigbee Tubular motor"    // onClusters may be wrong
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_5zbp6j0u" ,deviceJoinName: "Tuya Zigbee Curtain Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_rmymn92d" ,deviceJoinName: "Tuya Zigbee Curtain Motor"        // inverted reporting
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nogaemzt" ,deviceJoinName: "Tuya Zigbee Curtain Motor"
         // defaults are :  open: 0, stop: 1,  close: 2   
 	}
 
@@ -127,8 +130,9 @@ metadata {
     		input("enableTraceLog", "bool", title: "Enable trace logging", required: true, defaultValue: false)
 	    	input("enableUnexpectedMessageLog", "bool", title: "Log unexpected messages", required: true, defaultValue: false)   
     		input ("invertPosition", "bool", title: "Invert position reporting", description: "Some devices report the position 0..100 inverted", required: true, defaultValue: true)
-    		input ("positionReportTimeout", "number", title: "Position report timeout, ms", description: "The maximum time between position reports", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
     		input ("mixedDP2reporting", "bool", title: "Ignore the first Position report",  description: "Some devices report both the Target and the Current positions the same way", required: true, defaultValue: false)
+    		input ("substituteOpenClose", "bool", title: "Substitute Open/Close commands with SetPosition",  description: "Turn this option on if your motor does not work in 'lift' mode", required: true, defaultValue: false)
+    		input ("positionReportTimeout", "number", title: "Position report timeout, ms", description: "The maximum time between position reports", required: true, defaultValue: POSITION_UPDATE_TIMEOUT)
         }
         
 	}
@@ -192,13 +196,16 @@ def isMixedDP2reporting() {
 
 def isInvertedPositionReporting() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_xuzcvlku", "_TZE200_nueqqe6k", "_TZE200_5sbebbzs", "_TZE200_gubdgai2", "_TZE200_fzo2pocs", "_TZE200_wmcdj3aq", "_TZE200_nogaemzt", "_TZE200_xaabybja", "_TZE200_yenbr4om", "_TZE200_zpzndjez", "_TZE200_zuz7f94z"])
+    if (manufacturer in ["_TZE200_xuzcvlku", "_TZE200_nueqqe6k", "_TZE200_5sbebbzs", "_TZE200_gubdgai2", "_TZE200_fzo2pocs", "_TZE200_wmcdj3aq", "_TZE200_nogaemzt", "_TZE200_xaabybja", "_TZE200_yenbr4om", "_TZE200_zpzndjez", 
+                         "_TZE200_zuz7f94z", "_TZE200_rmymn92d"])
         return true
     else
         return false
 }
 
 def isZM25TQ() { return device.getDataValue("manufacturer") in ["_TZE200_fzo2pocs"] }
+
+def isOpenCloseSubstituted() { return device.getDataValue("manufacturer") in ["_TZE200_rddyvrci", "_TZE200_fzo2pocs"] }
 
 def getPositionReportTimeout() {
     return POSITION_UPDATE_TIMEOUT
@@ -227,14 +234,6 @@ def configure(boolean fullInit = true) {
     state.isTargetRcvd = false
 
 	sendEvent(name: "numberOfButtons", value: 5)
-    /*
-	if (device.currentValue("position") != null
-        && (device.currentValue("windowShade") == "closed"
-            || device.currentValue("windowShade") == "open"
-            || device.currentValue("windowShade") == "partially open")) {
-		updateWindowShadeArrived(device.currentValue("position"))
-	}
-    */
 
 	// Must run async otherwise, one will block the other
 	runIn(1, setMode)
@@ -259,10 +258,11 @@ def configure(boolean fullInit = true) {
     // Reset the Advanced Options parameters to their default values depending on the model/manufacturer
     if (settings.mixedDP2reporting == null || fullInit == true) device.updateSetting("mixedDP2reporting", [value: isMixedDP2reporting(), type: "bool"]) 
     if (settings.invertPosition == null || fullInit == true) device.updateSetting("invertPosition", [value: isInvertedPositionReporting(), type: "bool"]) 
+    if (settings.substituteOpenClose == null || fullInit == true) device.updateSetting("substituteOpenClose", [value: isOpenCloseSubstituted(), type: "bool"]) 
     if (settings.positionReportTimeout == null || fullInit == true) device.updateSetting("positionReportTimeout", [value: getPositionReportTimeout(), type: "number"]) 
     
     logInfo("${device.displayName} configured : model=${device.getDataValue('model')} manufacturer=${device.getDataValue('manufacturer')}")
-    logDebug(" fullInit=${fullInit} invertPosition=${settings.invertPosition } positionReportTimeout=${positionReportTimeout} mixedDP2reporting=${settings.mixedDP2reporting}")
+    logDebug(" fullInit=${fullInit} invertPosition=${settings.invertPosition}, positionReportTimeout=${positionReportTimeout}, mixedDP2reporting=${settings.mixedDP2reporting}, substituteOpenClose=${settings.substituteOpenClose}")
 }
 
 def setDirection() {
@@ -660,8 +660,8 @@ def refresh()
 def close() {
     logDebug("close, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 0)
-	if (mode == MODE_TILT) {
-      	logDebug("close mode == MODE_TILT")
+	if (mode == MODE_TILT || settings?.substituteOpenClose == true) {
+        logDebug("close mode == ${settings?.substituteOpenClose == true ? 'substituted with setPosition(0)' : 'MODE_TILT'} ")
 		setPosition(0)
 	} 
     else {
@@ -676,8 +676,8 @@ def close() {
 def open() {
 	logDebug("open, direction = ${direction as int}")
 	//sendEvent(name: "position", value: 100)
-	if (mode == MODE_TILT) {
-      	logDebug("open mode == MODE_TILT")
+	if (mode == MODE_TILT || settings?.substituteOpenClose == true) {
+        logDebug("open mode == ${settings?.substituteOpenClose == true ? 'substituted with setPosition(100)' : 'MODE_TILT'} ")
 		setPosition(100)
 	} 
     else {
