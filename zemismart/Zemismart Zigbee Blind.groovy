@@ -18,6 +18,7 @@
  *
  * VERSION HISTORY
  *                                  
+ * 3.1.7 (2022-05-14) [kkossev]   - _TZE200_fzo2pocs ZM25TQ Tubular motor test; reversed O/S/C commands bug fix;
  * 3.1.6 (2022-05-13) [kkossev]   - _TZE200_gubdgai2 defaults fixed; 4 new models fingerprints and defaults added.
  * 3.1.5 (2022-05-02) [kkossev]   - _TZE200_rddyvrci O/C/S commands DP bug fix: added Refresh and Battery capabilities; mixedDP2reporting logic rewritten
  * 3.1.4 (2022-05-02) [kkossev]   - added 'target' state variable; handle mixedDP2reporting; Configure() loads default Advanced Options depending on model/manufacturer; added INFO logging; added importUrl:
@@ -46,7 +47,7 @@ import hubitat.zigbee.zcl.DataType
 import hubitat.helper.HexUtils
 
 private def textVersion() {
-	return "3.1.6 - 2022-05-13 8:19 AM"
+	return "3.1.7 - 2022-05-14 9:22 AM"
 }
 
 private def textCopyright() {
@@ -96,6 +97,8 @@ metadata {
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_3i3exuay" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_zpzndjez" ,deviceJoinName: "Tuya Zigbee Blind Motor"
         fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,0004,0005,EF00", outClusters:"0019,000A", model:"TS0601", manufacturer:"_TZE200_nhyj64w2" ,deviceJoinName: "Tuya Zigbee Blind Motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,000A,0004,0005,EF00", outClusters:"0019", model:"TS0601", manufacturer:"_TZE200_fzo2pocs" ,deviceJoinName: "Zemismart ZM25TQ Tubular motor"
+        fingerprint profileId:"0104", endpointId:"01", inClusters:"0000,000A,0004,0005,EF00", outClusters:"0019", model:"TS0601", manufacturer:"_TZE200_4vobcgd3" ,deviceJoinName: "Zemismart Zigbee Tubular motor"    // onClusters may be wrong
         // defaults are :  open: 0, stop: 1,  close: 2   
 	}
 
@@ -160,7 +163,7 @@ def getDpCommandOpen() {
 // Stop - default 0x01
 def getDpCommandStop() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k"]) 
+    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_zah67ekd"]) 
         return DP_COMMAND_CLOSE //0x02
     else if (manufacturer in ["_TZE200_rddyvrci"]) 
         return DP_COMMAND_OPEN //0x00
@@ -171,7 +174,7 @@ def getDpCommandStop() {
 // Close - default 0x02
 def getDpCommandClose() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_rddyvrci"])
+    if (manufacturer in ["_TZE200_nueqqe6k", "_TZE200_rddyvrci", "_TZE200_zah67ekd"])
         return DP_COMMAND_STOP //0x01
     else if (manufacturer in ["_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"])
         return DP_COMMAND_OPEN //0x00
@@ -194,6 +197,8 @@ def isInvertedPositionReporting() {
     else
         return false
 }
+
+def isZM25TQ() { return device.getDataValue("manufacturer") in ["_TZE200_fzo2pocs"] }
 
 def getPositionReportTimeout() {
     return POSITION_UPDATE_TIMEOUT
@@ -452,7 +457,20 @@ def parseSetDataResponse(descMap) {
 			}
             restartPositionReportTimeout()
     		break
+        
+        case 0x0C: 
+            logDebug("parse: ZM25TQ unknown DP ${dp} value = ${dataValue}")
+            break
 		
+        case DP_ID_BATTERY: // 0xOD Battery
+			if (dataValue >= 0 && dataValue <= 100) {
+				logDebug("parse: battery=${dataValue}")
+				updateBattery(dataValue)
+			} else {
+				logUnexpectedMessage("parse: Unexpected DP_ID_BATTERY dataValue=${dataValue}")
+			}
+			break
+        
 		case DP_ID_MODE: // 0x65 Mode
 			def modeText = MODE_MAP[dataValue]
 			if (modeText != null) {
@@ -462,25 +480,33 @@ def parseSetDataResponse(descMap) {
 				logUnexpectedMessage("parse: Unexpected DP_ID_MODE dataValue=${dataValue}")
 			}
 			break
+        
+        case 0x67 :      // (103) ZM25TQ UP limit (when direction is Forward; probably reversed in Backward direction?)
+            logDebug("parse: ZM25TQ Up limit was ${dataValue==0?'reset':'set'} (direction:${settings.direction})")
+            break
+        
+        case 0x68 :      // (103) ZM25TQ Middle limit
+            logDebug("parse: ZM25TQ Middle limit was ${dataValue==0?'reset':'set'} (direction:${settings.direction})")
+            break
 		
-		case DP_ID_SPEED: // 0x69 Motor speed
-			if (dataValue >= 0 && dataValue <= 100) {
-				logDebug("parse: speed=${dataValue}")
-				updateSpeed(dataValue)
-			} else {
-				logUnexpectedMessage("parse: Unexpected DP_ID_SPEED dataValue=${dataValue}")
-			}
+		case DP_ID_SPEED: // 0x69 Motor speed or ZM25TQ Down limit
+            if (isZM25TQ) {
+                logDebug("parse: ZM25TQ Down limit was ${dataValue==0?'reset':'set'} (direction:${settings.direction})")
+            }
+            else {
+    			if (dataValue >= 0 && dataValue <= 100) {
+    				logDebug("parse: speed=${dataValue}")
+    				updateSpeed(dataValue)
+    			} else {
+    				logUnexpectedMessage("parse: Unexpected DP_ID_SPEED dataValue=${dataValue}")
+    			}
+            }
 			break
+        
+        case 0x6A: // 106
+            logDebug("parse: ZM25TQ motor mode (DP=${dp}) value = ${dataValue}")
+            break
 			
-        case DP_ID_BATTERY: // 0xOD Battery
-			if (dataValue >= 0 && dataValue <= 100) {
-				logDebug("parse: battery=${dataValue}")
-				updateBattery(dataValue)
-			} else {
-				logUnexpectedMessage("parse: Unexpected DP_ID_BATTERY dataValue=${dataValue}")
-			}
-			break
-		
 		default:
 			logUnexpectedMessage("parse: Unknown DP_ID dp=0x${data[2]}, dataType=0x${data[3]} dataValue=${dataValue}")
 			break
