@@ -151,7 +151,7 @@ def isCurtainMotor() {
 // Open - default 0x00
 def getDpCommandOpen() {
     def manufacturer = device.getDataValue("manufacturer")
-    if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3", "_TZE200_fzo2pocs"] ) 
+    if (manufacturer in ["_TZE200_rddyvrci", "_TZE200_wmcdj3aq", "_TZE200_cowvfni3", "_TYST11_cowvfni3"] ) 
         return DP_COMMAND_CLOSE //0x02
     else
         return DP_COMMAND_OPEN //0x00
